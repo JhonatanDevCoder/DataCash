@@ -46,6 +46,81 @@
         .chart-container { background: var(--card-background); padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px var(--shadow-color); position: relative; height: 350px; }
         @media (max-width: 768px) { .chart-section { grid-template-columns: 1fr; } }
 
+        /* --- ESTILOS PARA LA SECCIÓN DE ADMINISTRADOR --- */
+        .admin-section { padding: 20px; }
+        .admin-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .admin-users-section {
+            background: var(--card-background);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+        }
+        .admin-users-table {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        .admin-users-table table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        .admin-users-table th, .admin-users-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .admin-users-table th {
+            background-color: var(--background);
+            font-weight: 600;
+        }
+        .admin-charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .admin-action-btn {
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin: 0 4px;
+            font-size: 0.9rem;
+        }
+        .admin-action-btn.view { background: var(--primary-blue); color: white; }
+        .admin-action-btn.delete { background: var(--primary-red); color: white; }
+        .user-stats-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--card-background);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            max-width: 90%;
+            width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            display: none;
+        }
+
         /* --- ESTILOS PARA LAS TARJETAS DESPLEGABLES --- */
         .collapsible-trigger {
             cursor: pointer;
@@ -70,6 +145,67 @@
 </head>
 <body>
     <div class="container">
+        <!-- SECCIÓN DE ADMINISTRADOR -->
+        <div class="admin-section" id="adminSection" style="display: none;">
+            <div class="header">
+                <h1>Panel de Administración - DataCash</h1>
+                <div>
+                    <span id="adminNameDisplay" style="margin-right: 20px;"></span>
+                    <button class="btn btn-red" onclick="cerrarSesion()">Cerrar Sesión</button>
+                </div>
+            </div>
+            
+            <!-- Panel de Estadísticas Generales -->
+            <div class="admin-stats">
+                <div class="resumen-card">
+                    <h3>Usuarios Totales</h3>
+                    <p id="totalUsuarios">0</p>
+                </div>
+                <div class="resumen-card">
+                    <h3>Transacciones Totales</h3>
+                    <p id="totalTransacciones">0</p>
+                </div>
+                <div class="resumen-card">
+                    <h3>Movimiento Total</h3>
+                    <p id="movimientoTotal">$0</p>
+                </div>
+            </div>
+
+            <!-- Lista de Usuarios -->
+            <div class="admin-users-section">
+                <h2>Usuarios Registrados</h2>
+                <div class="admin-users-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Email</th>
+                                <th>Fecha Registro</th>
+                                <th>Balance Total</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersList">
+                            <!-- Los usuarios se cargarán dinámicamente aquí -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Gráficos Administrativos -->
+            <div class="admin-charts">
+                <div class="chart-container">
+                    <h3>Actividad de Usuarios</h3>
+                    <canvas id="userActivityChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Distribución de Transacciones</h3>
+                    <canvas id="transactionDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
         <!-- SECCIÓN DE AUTENTICACIÓN -->
         <div id="authContainer">
              <div class="auth-section" id="loginSection">
@@ -189,7 +325,8 @@
 
         function toggleVistaPrincipal(mostrarGestor) {
             document.getElementById('authContainer').style.display = mostrarGestor ? 'none' : 'block';
-            document.getElementById('gestorSection').style.display = mostrarGestor ? 'block' : 'none';
+            document.getElementById('gestorSection').style.display = (mostrarGestor && currentUser?.rol !== 'ADMIN') ? 'block' : 'none';
+            document.getElementById('adminSection').style.display = (mostrarGestor && currentUser?.rol === 'ADMIN') ? 'block' : 'none';
         }
 
         // --- LÓGICA DE LA APLICACIÓN ---
@@ -237,10 +374,169 @@
                 body: JSON.stringify(data)
             });
             if (result) {
-                currentUser = { id: result.usuarioId, nombre: result.nombreUsuario };
+                currentUser = { 
+                    id: result.usuarioId, 
+                    nombre: result.nombreUsuario,
+                    rol: result.rol 
+                };
                 currentMesId = result.mesId;
                 localStorage.setItem('session', JSON.stringify({ currentUser, currentMesId }));
-                await inicializarGestor();
+                
+                if (currentUser.rol === 'ADMIN') {
+                    await inicializarPanelAdmin();
+                } else {
+                    await inicializarGestor();
+                }
+            }
+        }
+
+        // --- FUNCIONES DEL PANEL DE ADMINISTRADOR ---
+        async function inicializarPanelAdmin() {
+            document.getElementById('adminSection').style.display = 'block';
+            document.getElementById('gestorSection').style.display = 'none';
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('adminNameDisplay').textContent = `Administrador: ${currentUser.nombre}`;
+            
+            await Promise.all([
+                cargarEstadisticasGenerales(),
+                cargarListaUsuarios(),
+                cargarGraficosAdmin()
+            ]);
+        }
+
+        async function cargarEstadisticasGenerales() {
+            const stats = await fetchAPI('/admin/estadisticas');
+            if (stats) {
+                document.getElementById('totalUsuarios').textContent = stats.totalUsuarios;
+                document.getElementById('totalTransacciones').textContent = stats.totalTransacciones;
+                document.getElementById('movimientoTotal').textContent = formatCurrency(stats.movimientoTotal);
+            }
+        }
+
+        async function cargarListaUsuarios() {
+            const usuarios = await fetchAPI('/admin/usuarios');
+            if (usuarios) {
+                const tbody = document.getElementById('usersList');
+                tbody.innerHTML = usuarios.map(user => `
+                    <tr>
+                        <td>${user.id}</td>
+                        <td>${user.nombre}</td>
+                        <td>${user.email}</td>
+                        <td>${new Date(user.fechaRegistro).toLocaleDateString()}</td>
+                        <td>${formatCurrency(user.balanceTotal)}</td>
+                        <td>
+                            <button class="admin-action-btn view" onclick="verDetallesUsuario(${user.id})">
+                                Ver Detalles
+                            </button>
+                            <button class="admin-action-btn delete" onclick="eliminarUsuario(${user.id})">
+                                Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function cargarGraficosAdmin() {
+            // Gráfico de Actividad de Usuarios
+            const actividadData = await fetchAPI('/admin/actividad-usuarios');
+            if (actividadData) {
+                new Chart(document.getElementById('userActivityChart').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: actividadData.fechas,
+                        datasets: [{
+                            label: 'Transacciones',
+                            data: actividadData.transacciones,
+                            borderColor: '#007AFF',
+                            tension: 0.4,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+
+            // Gráfico de Distribución de Transacciones
+            const distribucionData = await fetchAPI('/admin/distribucion-transacciones');
+            if (distribucionData) {
+                new Chart(document.getElementById('transactionDistributionChart').getContext('2d'), {
+                    type: 'pie',
+                    data: {
+                        labels: ['Ingresos', 'Gastos'],
+                        datasets: [{
+                            data: [distribucionData.ingresos, distribucionData.gastos],
+                            backgroundColor: ['#34c759', '#ff3b30']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+        }
+
+        async function verDetallesUsuario(userId) {
+            const detalles = await fetchAPI(`/admin/usuario/${userId}/detalles`);
+            if (detalles) {
+                const modal = document.createElement('div');
+                modal.className = 'user-stats-modal';
+                modal.innerHTML = `
+                    <h2>${detalles.nombre}</h2>
+                    <div class="user-stats-content">
+                        <div class="stat-item">
+                            <h3>Balance Total</h3>
+                            <p>${formatCurrency(detalles.balanceTotal)}</p>
+                        </div>
+                        <div class="stat-item">
+                            <h3>Total Ingresos</h3>
+                            <p>${formatCurrency(detalles.totalIngresos)}</p>
+                        </div>
+                        <div class="stat-item">
+                            <h3>Total Gastos</h3>
+                            <p>${formatCurrency(detalles.totalGastos)}</p>
+                        </div>
+                        <div class="stat-item">
+                            <h3>Categorías Más Usadas</h3>
+                            <ul>
+                                ${detalles.categoriasPrincipales.map(cat => 
+                                    `<li>${cat.nombre}: ${formatCurrency(cat.total)}</li>`
+                                ).join('')}
+                            </ul>
+                        </div>
+                        <button class="btn btn-blue" onclick="this.closest('.user-stats-modal').remove();
+                            document.querySelector('.modal-backdrop').remove();">
+                            Cerrar
+                        </button>
+                    </div>
+                `;
+                
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop';
+                backdrop.style.display = 'block';
+                
+                document.body.appendChild(backdrop);
+                document.body.appendChild(modal);
+                modal.style.display = 'block';
+            }
+        }
+
+        async function eliminarUsuario(userId) {
+            if (!confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) {
+                return;
+            }
+            
+            const result = await fetchAPI(`/admin/usuario/${userId}`, {
+                method: 'DELETE'
+            });
+            
+            if (result) {
+                await cargarListaUsuarios();
+                await cargarEstadisticasGenerales();
             }
         }
 

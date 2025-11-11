@@ -51,11 +51,17 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
         Optional<Usuario> usuarioOpt = usuarioRepository.findByEmail(loginRequest.getEmail());
 
-        if (usuarioOpt.isEmpty() || !passwordEncoder.matches(loginRequest.getPassword(), usuarioOpt.get().getPassword())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Correo o contraseña incorrectos."));
+        if (usuarioOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("message", "Usuario no encontrado con el email: " + loginRequest.getEmail()));
         }
 
         Usuario usuario = usuarioOpt.get();
+        if (!passwordEncoder.matches(loginRequest.getPassword(), usuario.getPassword())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("message", "Contraseña incorrecta"));
+        }
+        
         LocalDate hoy = LocalDate.now();
         
         Mes mesActual = mesRepository.findByUsuarioAndAnioAndMes(usuario, hoy.getYear(), hoy.getMonthValue())
@@ -71,6 +77,7 @@ public class AuthController {
             "Inicio de sesión exitoso.",
             usuario.getId(),
             usuario.getNombre(),
+            usuario.getRol(),
             mesActual.getId(),
             mesActual.getLimiteGasto()
         );

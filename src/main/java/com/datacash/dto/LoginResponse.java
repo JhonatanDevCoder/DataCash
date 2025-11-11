@@ -9,7 +9,8 @@ import java.math.BigDecimal;
 public class LoginResponse {
     private String message;
     private Integer usuarioId;
-    private String nombreUsuario; // Mantenemos este para claridad en la respuesta
+    private String nombreUsuario;
+    private String rol;
     private Integer mesId;
     private BigDecimal limiteGasto;
 }
